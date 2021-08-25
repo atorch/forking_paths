@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 
-def simulate_df(true_beta0, n_obs=200):
+def simulate_df(true_beta0, n_obs=100, epsilon_scale=2.0):
 
     df = pd.DataFrame(
         {
@@ -21,7 +21,7 @@ def simulate_df(true_beta0, n_obs=200):
         colname = f"x{idx}"
         df[colname] = df["x0"] + np.random.normal(size=n_obs)
 
-    df["epsilon"] = np.random.normal(size=n_obs)
+    df["epsilon"] = np.random.normal(size=n_obs, scale=epsilon_scale)
 
     # Note: this is the true regression equation
     df["y"] = 5 + true_beta0 * df["x0"] + 2 * df["x1"] - 1 * df["x2"] + df["epsilon"]
@@ -284,12 +284,11 @@ def main():
         f, ax = plt.subplots(figsize=(12, 8))
         ax = df["beta0"].plot.hist(bins=50)
         plt.axvline(x=true_beta0, alpha=0.5, linestyle="--", color="k")
+        # TODO More info in plot (title, xlab, CI coverage, etc etc)
         plt.savefig(
             f"sampling_distribution_for_estimated_beta0_{run_regression.__name__}.png"
         )
         plt.close()
-
-    # TODO Plot histogram showing (a) true coefficient value, (b) distribution of coef estimates
 
     # TODO Another one with publication bias, drawer
 
