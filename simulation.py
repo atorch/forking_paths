@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 
-def simulate_df(true_beta0, n_obs=500):
+def simulate_df(true_beta0, n_obs=200):
 
     df = pd.DataFrame(
         {
@@ -17,11 +17,9 @@ def simulate_df(true_beta0, n_obs=500):
 
     # Note: predictors x3, x4, x5, x6, ... have true coefficients equal to zero
     # (they have no effect on y), but they are correlated with x0
-    for idx in range(3, 25):
+    for idx in range(3, 40):
         colname = f"x{idx}"
-        df[colname] = (
-            df["x0"] + np.random.uniform(size=n_obs) + np.random.uniform(size=n_obs)
-        )
+        df[colname] = df["x0"] + np.random.normal(size=n_obs)
 
     df["epsilon"] = np.random.normal(size=n_obs)
 
@@ -62,7 +60,8 @@ def run_regression_v0(df_train):
 
     model = LinearRegression()
 
-    X = df_train[["x0", "x1", "x2"]]
+    predictors = ["x0", "x1", "x2"]
+    X = df_train[predictors]
     y = df_train["y"]
 
     model.fit(X=X, y=y)
@@ -74,10 +73,12 @@ def run_regression_v0(df_train):
     ci_lower = estimated_coefficients - 1.96 * std_errors
     ci_upper = estimated_coefficients + 1.96 * std_errors
 
-    return estimated_coefficients, ci_lower, ci_upper
+    n_predictors = len(predictors)
+
+    return estimated_coefficients, ci_lower, ci_upper, n_predictors
 
 
-def run_regression_v1(df_train, beta0_threshold=1.75, max_iterations=20):
+def run_regression_v1(df_train, beta0_threshold=1.75, max_iterations=30):
 
     """
     This function mimics a researcher following forking paths:
@@ -119,7 +120,127 @@ def run_regression_v1(df_train, beta0_threshold=1.75, max_iterations=20):
 
     # Only pay attention to estimated coefficients for beta0, beta1, beta2,
     # even though the model might include additional predictors
-    return estimated_coefficients[0:3], ci_lower[0:3], ci_upper[0:3]
+    # This makes it simpler to compare results across simulation runs
+    return estimated_coefficients[0:3], ci_lower[0:3], ci_upper[0:3], len(predictors)
+
+
+def run_regression_v2(df_train, beta0_threshold=1.45, max_iterations=20):
+
+    """
+    This function mimics a researcher following forking paths:
+    they start with a regression of
+    y on x0, x1 and x2 (and a constant), but then examine the estimated
+    coefficient for beta0, check whether it is more than 1.96 std errors above beta0_threshold,
+    and (if so) keep adding additional predictors and rerunning the regression
+    (for a maximum of max_iterations steps). The analysis -- specifically the set of regression
+    coefficients -- varies based on the data.
+    """
+
+    for last_predictor_idx in range(2, 2 + max_iterations + 1):
+
+        predictors = [f"x{idx}" for idx in range(0, last_predictor_idx + 1)]
+
+        model = LinearRegression()
+
+        X = df_train[predictors]
+        y = df_train["y"]
+
+        model.fit(X=X, y=y)
+
+        estimated_coefficients = model.coef_
+
+        std_errors = calculate_std_errors(model, y, X)
+
+        ci_lower = estimated_coefficients - 1.96 * std_errors
+        ci_upper = estimated_coefficients + 1.96 * std_errors
+
+        if ci_lower[0] > beta0_threshold:
+            break
+
+    return estimated_coefficients[0:3], ci_lower[0:3], ci_upper[0:3], len(predictors)
+
+
+def run_regression_v3(df_train, beta0_threshold=1.45, max_iterations=40):
+
+    """
+    This function mimics a researcher following forking paths:
+    they start with a regression of
+    y on x0, x1 and x2 (and a constant), but then examine the estimated
+    coefficient for beta0, check whether it is more than 1.96 std errors above beta0_threshold,
+    and (if so) remove a random datapoint from the training set and rerun the regression.
+    """
+
+    for _ in range(max_iterations):
+
+        predictors = ["x0", "x1", "x2"]
+
+        model = LinearRegression()
+
+        X = df_train[predictors]
+        y = df_train["y"]
+
+        model.fit(X=X, y=y)
+
+        estimated_coefficients = model.coef_
+
+        std_errors = calculate_std_errors(model, y, X)
+
+        ci_lower = estimated_coefficients - 1.96 * std_errors
+        ci_upper = estimated_coefficients + 1.96 * std_errors
+
+        if ci_lower[0] > beta0_threshold:
+            break
+
+        # Note: the researcher convinces themselves that there is something wrong
+        # with this measurement and removes it from the training set
+        df_train.drop(inplace=True, labels=np.random.choice(df_train.index.values))
+
+    return estimated_coefficients[0:3], ci_lower[0:3], ci_upper[0:3], len(predictors)
+
+
+def run_regression_v4(df_train, beta0_threshold=1.5, max_iterations=40):
+
+    """
+    This function mimics a researcher following forking paths:
+    they start with a regression of
+    y on x0, x1 and x2 (and a constant), but then examine the estimated
+    coefficient for beta0, check whether it is more than 1.96 std errors above beta0_threshold,
+    and (if so) remove a random datapoint from the training set and rerun the regression.
+    """
+
+    for _ in range(max_iterations):
+
+        predictors = ["x0", "x1", "x2"]
+
+        model = LinearRegression()
+
+        X = df_train[predictors]
+        y = df_train["y"]
+
+        model.fit(X=X, y=y)
+
+        estimated_coefficients = model.coef_
+
+        std_errors = calculate_std_errors(model, y, X)
+
+        ci_lower = estimated_coefficients - 1.96 * std_errors
+        ci_upper = estimated_coefficients + 1.96 * std_errors
+
+        if ci_lower[0] > beta0_threshold:
+            break
+
+        # Note: the researcher convinces themselves that there is something wrong
+        # with this measurement and removes it from the training set
+        # The probability of removal varies with y and x0
+        pr_remove_logits = -(df_train["y"] - df_train["y"].mean()) * (
+            df_train["x0"] - df_train["x0"].mean()
+        )
+        pr_remove = np.exp(pr_remove_logits) / np.exp(pr_remove_logits).sum()
+        df_train.drop(
+            inplace=True, labels=np.random.choice(df_train.index.values, p=pr_remove)
+        )
+
+    return estimated_coefficients[0:3], ci_lower[0:3], ci_upper[0:3], len(predictors)
 
 
 def main():
@@ -128,18 +249,26 @@ def main():
 
     true_beta0 = 1.5
 
-    for run_regression in [run_regression_v0, run_regression_v1]:
+    for run_regression in [
+        run_regression_v4,
+        run_regression_v3,
+        run_regression_v0,
+        run_regression_v1,
+        run_regression_v2,
+    ]:
 
         n_replications = 500
         coef_replications = []
         ci_contains_beta0_replications = []
+        n_predictors_replications = []
 
         for _ in range(n_replications):
 
             df_train = simulate_df(true_beta0=true_beta0)
 
-            coefs, ci_lower, ci_upper = run_regression(df_train)
+            coefs, ci_lower, ci_upper, n_predictors = run_regression(df_train)
             coef_replications.append(coefs)
+            n_predictors_replications.append(n_predictors)
 
             ci_contains_beta0 = ci_lower[0] < true_beta0 < ci_upper[0]
             ci_contains_beta0_replications.append(ci_contains_beta0)
@@ -149,10 +278,12 @@ def main():
         print(f"Coverage of 95% confidence interval for beta_0: {ci_coverage}")
 
         df = pd.DataFrame(coef_replications, columns=["beta0", "beta1", "beta2"])
+        df["n_predictors"] = pd.Series(n_predictors_replications)
         print(df.describe())
 
         f, ax = plt.subplots(figsize=(12, 8))
         ax = df["beta0"].plot.hist(bins=50)
+        plt.axvline(x=true_beta0, alpha=0.5, linestyle="--", color="k")
         plt.savefig(
             f"sampling_distribution_for_estimated_beta0_{run_regression.__name__}.png"
         )
