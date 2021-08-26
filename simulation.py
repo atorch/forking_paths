@@ -23,7 +23,8 @@ def simulate_df(true_beta0, n_obs=100, epsilon_scale=2.0):
 
     df["epsilon"] = np.random.normal(size=n_obs, scale=epsilon_scale)
 
-    # Note: this is the true regression equation
+    # This is the true regression equation. The researcher is trying
+    # to estimate the coefficient on x0
     df["y"] = 5 + true_beta0 * df["x0"] + 2 * df["x1"] - 1 * df["x2"] + df["epsilon"]
 
     return df
@@ -33,9 +34,10 @@ def calculate_std_errors(model, y, X):
 
     residuals = y - model.predict(X)
 
-    # Note: we need to include the constant when calculating (X^T X)^-1
+    # We need to include the constant when calculating (X^T X)^-1
     X_with_constant = np.hstack([np.ones((X.shape[0], 1)), X])
 
+    # Good old (X^T X)^-1
     X_transpose_X_inverse = np.linalg.inv(
         np.matmul(np.transpose(X_with_constant), X_with_constant)
     )
@@ -44,6 +46,7 @@ def calculate_std_errors(model, y, X):
     # See https://web.stanford.edu/~mrosenfe/soc_meth_proj3/matrix_OLS_NYU_notes.pdf
     sigma_squared_hat = np.sum(residuals ** 2) / (X.shape[0] - X_with_constant.shape[1])
 
+    # Return std errors for coefficients only (excluding the constant term)
     std_errors = np.sqrt(sigma_squared_hat * np.diag(X_transpose_X_inverse)[1:])
 
     return std_errors
@@ -191,7 +194,7 @@ def run_regression_v3(df_train, beta0_threshold=1.45, max_iterations=40):
         if ci_lower[0] > beta0_threshold:
             break
 
-        # Note: the researcher convinces themselves that there is something wrong
+        # Imagine that the researcher convinces themselves that there is something wrong
         # with this measurement and removes it from the training set
         df_train.drop(inplace=True, labels=np.random.choice(df_train.index.values))
 
@@ -205,7 +208,9 @@ def run_regression_v4(df_train, beta0_threshold=1.5, max_iterations=40):
     they start with a regression of
     y on x0, x1 and x2 (and a constant), but then examine the estimated
     coefficient for beta0, check whether it is more than 1.96 std errors above beta0_threshold,
-    and (if so) remove a random datapoint from the training set and rerun the regression.
+    and (if so) remove a datapoint from the training set and rerun the regression.
+    Importantly, the datapoint is _not_ chosen at random. Some points
+    have a higher probability of being removed than others.
     """
 
     for _ in range(max_iterations):
@@ -229,9 +234,10 @@ def run_regression_v4(df_train, beta0_threshold=1.5, max_iterations=40):
         if ci_lower[0] > beta0_threshold:
             break
 
-        # Note: the researcher convinces themselves that there is something wrong
+        # The researcher convinces themselves that there is something wrong
         # with this measurement and removes it from the training set
-        # The probability of removal varies with y and x0
+        # Importantly, the probability of removal varies with y and x0
+        # (compare to run_regression_v3)
         pr_remove_logits = -(df_train["y"] - df_train["y"].mean()) * (
             df_train["x0"] - df_train["x0"].mean()
         )
@@ -284,7 +290,11 @@ def main():
         f, ax = plt.subplots(figsize=(12, 8))
         ax = df["beta0"].plot.hist(bins=50)
         plt.axvline(x=true_beta0, alpha=0.5, linestyle="--", color="k")
-        # TODO More info in plot (title, xlab, CI coverage, etc etc)
+
+        # TODO Include 95% CI coverage
+        plt.title(f"Sampling distribution of estimated beta_0 for {run_regression.__name__}")
+
+        plt.xlabel(f"Estimated beta_0 (true value is {true_beta0})")
         plt.savefig(
             f"sampling_distribution_for_estimated_beta0_{run_regression.__name__}.png"
         )
