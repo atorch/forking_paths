@@ -1,3 +1,4 @@
+from matplotlib import cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -213,7 +214,7 @@ def run_regression_v4(df_train, beta0_threshold=1.5, max_iterations=40):
     have a higher probability of being removed than others.
     """
 
-    for _ in range(max_iterations):
+    for iteration in range(max_iterations):
 
         predictors = ["x0", "x1", "x2"]
 
@@ -242,6 +243,22 @@ def run_regression_v4(df_train, beta0_threshold=1.5, max_iterations=40):
             df_train["x0"] - df_train["x0"].mean()
         )
         pr_remove = np.exp(pr_remove_logits) / np.exp(pr_remove_logits).sum()
+
+        if iteration == 0:
+            f, ax = plt.subplots(figsize=(12, 8))
+            plt.scatter(
+                df_train["x0"],
+                df_train["y"],
+                alpha=0.5,
+                c=pr_remove,
+                cmap=plt.cm.coolwarm,
+            )
+            plt.xlabel("x0")
+            plt.ylabel("y")
+            plt.title("Probability of Removal")
+            plt.savefig(f"plots/pr_remove_point_run_regression_v4.png")
+            plt.close()
+
         df_train.drop(
             inplace=True, labels=np.random.choice(df_train.index.values, p=pr_remove)
         )
@@ -290,17 +307,18 @@ def main():
         f, ax = plt.subplots(figsize=(12, 8))
         ax = df["beta0"].plot.hist(bins=50)
         plt.axvline(x=true_beta0, alpha=0.5, linestyle="--", color="k")
-
-        # TODO Include 95% CI coverage
-        plt.title(f"Sampling distribution of estimated beta_0 for {run_regression.__name__}")
-
         plt.xlabel(f"Estimated beta_0 (true value is {true_beta0})")
+
+        title = (
+            f"Sampling distribution of estimated beta_0 for {run_regression.__name__}\n"
+            f"95% confidence interval coverage: {ci_coverage}"
+        )
+        plt.title(title)
+
         plt.savefig(
-            f"sampling_distribution_for_estimated_beta0_{run_regression.__name__}.png"
+            f"plots/sampling_distribution_for_estimated_beta0_{run_regression.__name__}.png"
         )
         plt.close()
-
-    # TODO Another one with publication bias, drawer
 
 
 if __name__ == "__main__":
